@@ -6,7 +6,7 @@ A Claude Code mod that shows your plan's usage limits (5-hour and weekly) as met
 
 ![The usage-pace pane in the desktop app (Japanese)](docs/pane.png)
 
-The screenshot shows the Japanese display. The mod has an English display too, used when Claude Code is set to English (see Language below).
+An English display is also available.
 
 ## What it shows
 Three parts, each of which can be turned on or off.

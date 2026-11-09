@@ -22,6 +22,8 @@ const TEXTS = {
     projectedShort: '見込み',
     used: '使用',
     untilReset: 'リセットまで',
+    resetClock: (c: string) => `(${c})`,
+    weekdays: ['日', '月', '火', '水', '木', '金', '土'],
     staleValue: '前回の値',
     noUsage: 'まだ使用量の値が無い(Claude の返答が来ると出る)',
     context: 'コンテキスト',
@@ -34,11 +36,12 @@ const TEXTS = {
     opened: '使用量のペースを開いた',
     notOpened: (why: string) => `開けなかった: ${why}`,
     description: '使用量のペースの表示を切り替える',
-    names: { pace: '使用率のペース', context: 'コンテキスト', line: '入力欄の下の1行' },
+    names: { pace: '使用率のペース', context: 'コンテキスト', line: '入力欄の下の1行', clock: 'リセットの時刻' },
     usage: [
       '/usage-pace               パネルの開閉',
       '/usage-pace <part> [on|off]  表示の切り替え(on/off を省くと反転)',
-      '    part: pace(使用率のペース) / context(コンテキスト) / line(入力欄の下の1行) / all',
+      '    part: pace(使用率のペース) / context(コンテキスト) / line(入力欄の下の1行)',
+      '          clock(パネルの見出しにリセットの時刻) / all',
       '/usage-pace line tiny     入力欄の下の1行を詰めて出す(line on で元に戻る)',
       '/usage-pace status        今の設定',
     ],
@@ -57,6 +60,8 @@ const TEXTS = {
     projectedShort: 'projected',
     used: 'used',
     untilReset: 'resets in',
+    resetClock: (c: string) => ` (${c})`,
+    weekdays: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
     staleValue: 'last reading',
     noUsage: 'No usage figures yet (they come with a reply from Claude)',
     context: 'Context',
@@ -69,18 +74,19 @@ const TEXTS = {
     opened: 'Opened the usage pace',
     notOpened: (why: string) => `Could not open: ${why}`,
     description: 'Show or hide the parts of the usage pace',
-    names: { pace: 'Usage pace', context: 'Context', line: 'Line under the prompt' },
+    names: { pace: 'Usage pace', context: 'Context', line: 'Line under the prompt', clock: 'Reset time' },
     usage: [
       '/usage-pace               open or close the pane',
       '/usage-pace <part> [on|off]  show or hide a part (no on/off: flip it)',
-      '    part: pace (usage pace) / context (context) / line (line under the prompt) / all',
+      '    part: pace (usage pace) / context (context) / line (line under the prompt)',
+      '          clock (reset time in the pane headings) / all',
       '/usage-pace line tiny     the line under the prompt, packed (line on: back to full)',
       '/usage-pace status        the current settings',
     ],
   },
 } as const
 
-type Texts = { [K in keyof (typeof TEXTS)['ja']]: (typeof TEXTS)['ja'][K] extends (...a: infer A) => string ? (...a: A) => string : (typeof TEXTS)['ja'][K] extends string ? string : (typeof TEXTS)['ja'][K] extends readonly string[] ? readonly string[] : Record<'pace' | 'context' | 'line', string> }
+type Texts = { [K in keyof (typeof TEXTS)['ja']]: (typeof TEXTS)['ja'][K] extends (...a: infer A) => string ? (...a: A) => string : (typeof TEXTS)['ja'][K] extends string ? string : (typeof TEXTS)['ja'][K] extends readonly string[] ? readonly string[] : Record<Part, string> }
 
 // The language of this session, set from Claude Code's language at start.
 let T: Texts = TEXTS.ja
@@ -117,8 +123,8 @@ const HOUR = 60 * MINUTE
 const limits = atom({ plugin: 'usage-pace', key: 'limits' } as const, [], { shape: 'limits-1' })
 const stale = atom({ plugin: 'usage-pace', key: 'stale' } as const, false)
 const context = atom({ plugin: 'usage-pace', key: 'context' } as const, { window: 0 }, { shape: 'context-1' })
-const ALL_ON: Parts = { pace: true, context: true, line: true, tiny: false }
-const parts = atom({ plugin: 'usage-pace', key: 'parts' } as const, ALL_ON, { shape: 'parts-2' })
+const ALL_ON: Parts = { pace: true, context: true, line: true, tiny: false, clock: true }
+const parts = atom({ plugin: 'usage-pace', key: 'parts' } as const, ALL_ON, { shape: 'parts-3' })
 // Bumped once a minute so the elapsed share moves between responses (no request is made).
 const tick = atom({ plugin: 'usage-pace', key: 'tick' } as const, 0)
 
@@ -138,6 +144,10 @@ export type Pace = {
   elapsed: number
   projected: number | null
   remainingMs: number
+  /** The reset time, epoch ms. */
+  resetAt: number
+  /** The weekly window: its reset time reads with the weekday. */
+  isWeekly: boolean
   /** How long before the reset the pace reaches 100% ("113m", "84h"); null when it does not. */
   ahead: string | null
   note: string | null
@@ -151,6 +161,13 @@ export function duration(ms: number): string {
   const hours = Math.floor((minutes % 1440) / 60)
   if (days > 0) return `${days}d ${hours}h`
   return hours > 0 ? `${hours}h ${minutes % 60}m` : `${minutes}m`
+}
+
+/** The reset time in local time: "14:30", or "土 9:00" / "Sat 9:00" for the weekly window. */
+export function resetClock(p: Pick<Pace, 'resetAt' | 'isWeekly'>): string {
+  const d = new Date(p.resetAt)
+  const time = `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+  return p.isWeekly ? `${T.weekdays[d.getDay()]} ${time}` : time
 }
 
 /** duration() without spaces, at most two units: "2h55m", "5d19h", "43m". */
@@ -175,7 +192,7 @@ export function pace(limit: Limit, now: number): Pace | null {
     ahead = window.unit === 'm' ? `${Math.round(aheadMs / MINUTE)}m` : `${Math.round(aheadMs / HOUR)}h`
     note = T.reachAhead(ahead)
   }
-  return { label: T[window.label], tag: window.tag, used, elapsed, projected, remainingMs, ahead, note }
+  return { label: T[window.label], tag: window.tag, used, elapsed, projected, remainingMs, resetAt, isWeekly: window.unit === 'h', ahead, note }
 }
 
 const pct = (v: number) => `${v.toFixed(1)}%`
@@ -293,10 +310,10 @@ function isParts(v: unknown): v is Parts {
   return typeof v === 'object' && v !== null && [p.pace, p.context, p.line].every(b => typeof b === 'boolean')
 }
 
-/** A saved setting, from before `tiny` too. */
+/** A saved setting, from before `tiny` and `clock` too. */
 function savedParts(v: unknown): Parts | null {
   if (!isParts(v)) return null
-  return { pace: v.pace, context: v.context, line: v.line, tiny: v.tiny === true }
+  return { pace: v.pace, context: v.context, line: v.line, tiny: v.tiny === true, clock: v.clock !== false }
 }
 
 async function drawStatus($: EngineInterface): Promise<void> {
@@ -360,8 +377,8 @@ async function setPaneShown($: EngineInterface, shown: Parts): Promise<void> {
   if (!wants && isOpen) await $.ui.close({ id: PANE })
 }
 
-type Part = 'pace' | 'context' | 'line'
-const PART_KEYS: Part[] = ['pace', 'context', 'line']
+type Part = 'pace' | 'context' | 'line' | 'clock'
+const PART_KEYS: Part[] = ['pace', 'context', 'line', 'clock']
 const usage = () => T.usage.join('\n')
 
 const describe = (p: Parts) =>
@@ -390,7 +407,7 @@ export const register: Register = on => {
     await $.command.register({
       name: 'usage-pace',
       description: T.description,
-      argumentHint: '[pace|context|line|all] [on|off|tiny] | status',
+      argumentHint: '[pace|context|line|clock|all] [on|off|tiny] | status',
     })
     const saved = await $.store.get(STORE_PARTS)
     const restored = savedParts(saved)
@@ -458,7 +475,7 @@ export const register: Register = on => {
           sections.push(
             <Box flexDirection="column">
               <Text>
-                <Text bold>{p.label} {usedPct(p.used)}</Text>
+                <Text bold>{p.label}{shown.clock ? T.resetClock(resetClock(p)) : ''} {usedPct(p.used)}</Text>
                 <Text dimColor>  {T.untilReset} {duration(p.remainingMs)}{isStale ? `  (${T.staleValue})` : ''}</Text>
               </Text>
               {isGraphic ? (

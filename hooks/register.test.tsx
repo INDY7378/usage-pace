@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { applyArgs, contextLevel, contextPercent, duration, meterSvg, pace, pickLanguage, setLanguage, statusLine, tokens } from './register'
+import { applyArgs, contextLevel, contextPercent, duration, meterSvg, pace, pickLanguage, resetClock, setLanguage, statusLine, tokens } from './register'
 
 const HOUR = 3_600_000
 const NOW = Date.parse('2026-11-08T12:00:00Z')
@@ -68,16 +68,18 @@ test('context figures and colours', async () => {
 })
 
 test('command arguments', async () => {
-  const all = { pace: true, context: true, line: true, tiny: false }
+  const all = { pace: true, context: true, line: true, tiny: false, clock: true }
   expect(applyArgs(all, 'line off')).toEqual({ ...all, line: false })
   expect(applyArgs(all, 'context')).toEqual({ ...all, context: false })
-  expect(applyArgs(all, 'all')).toEqual({ ...all, pace: false, context: false, line: false })
+  expect(applyArgs(all, 'all')).toEqual({ ...all, pace: false, context: false, line: false, clock: false })
+  expect(applyArgs(all, 'clock off')).toEqual({ ...all, clock: false })
+  expect(applyArgs({ ...all, clock: false }, 'clock')).toEqual(all)
   expect(applyArgs({ ...all, line: false }, 'line tiny')).toEqual({ ...all, tiny: true })
   expect(applyArgs({ ...all, tiny: true }, 'line on')).toEqual(all)
   expect(applyArgs({ ...all, tiny: true }, 'line off')).toEqual({ ...all, line: false, tiny: true })
   expect(typeof applyArgs(all, 'pace tiny')).toBe('string')
   expect(applyArgs({ ...all, line: false }, 'all')).toEqual(all)
-  expect(applyArgs(all, 'all off')).toEqual({ ...all, pace: false, context: false, line: false })
+  expect(applyArgs(all, 'all off')).toEqual({ ...all, pace: false, context: false, line: false, clock: false })
   expect(typeof applyArgs(all, 'constructor')).toBe('string')
   expect(typeof applyArgs(all, 'line maybe')).toBe('string')
 })
@@ -175,7 +177,16 @@ test('the language follows Claude Code, else the system locale', async () => {
     expect(fast.note).toBe('Reaches 100% 113m before the reset')
     expect(meterSvg(fast)).toContain('50.0% elapsed')
     expect(statusLine([fast], null, true)).toBe('[S] 80% 2h30m e: 160.0% (-113m) (last)')
+    expect(resetClock({ resetAt: new Date(2026, 10, 14, 9, 5).getTime(), isWeekly: true })).toBe('Sat 9:05')
   } finally {
     setLanguage('ja')
   }
+})
+
+test('the reset time, in local time', () => {
+  // 2026-11-14 is a Saturday
+  const at9 = new Date(2026, 10, 14, 9, 5).getTime()
+  expect(resetClock({ resetAt: at9, isWeekly: false })).toBe('9:05')
+  expect(resetClock({ resetAt: at9, isWeekly: true })).toBe('土 9:05')
+  expect(resetClock({ resetAt: new Date(2026, 10, 14, 14, 30).getTime(), isWeekly: false })).toBe('14:30')
 })

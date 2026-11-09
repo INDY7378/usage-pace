@@ -6,11 +6,14 @@ A Claude Code mod that shows your plan's usage limits (5-hour and weekly) as met
 
 ![The usage-pace pane in the desktop app (Japanese)](docs/pane.png)
 
+The screenshot shows the Japanese display. The mod has an English display too, used when Claude Code is set to English (see Language below).
+
 ## What it shows
 Three parts, each of which can be turned on or off.
 
 **Usage pace (`pace`, in the pane)**
 - The share used (whole percent) and the time left until the reset
+- The reset time in local time beside each window's name: `5-hour (14:30) 7%`, `Weekly (Sat 9:00) 45%` (`clock`, on by default)
 - `▼xx.x% elapsed` above the meter: how much of the window's time has passed (where usage would be at an even pace)
 - `▲xx.x% projected` below the meter: the share used at the reset if the current pace goes on (at the right end when over 100%)
 - When the projection is over 100%: "Reaches 100% xxh before the reset" (xxm for the 5-hour window)
@@ -36,7 +39,7 @@ Japanese and English. The mod follows Claude Code's `language` setting, or the s
 ## Usage
 - `/usage-pace`: open or close the pane
 - `/usage-pace <part> [on|off]`: show or hide a part; without on/off it flips
-  - parts: `pace` (usage pace), `context` (context), `line` (the line under the prompt), `all`
+  - parts: `pace` (usage pace), `context` (context), `line` (the line under the prompt), `clock` (the reset time in the pane), `all`
   - `line` also takes `tiny` (the packed line)
   - e.g. `/usage-pace line off`, `/usage-pace all on`
 - `/usage-pace status`: the current settings

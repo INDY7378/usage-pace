@@ -1,6 +1,6 @@
 {
   "name": "usage-pace",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Plan usage meters (5-hour and weekly) with elapsed time and the pace projection",
   "author": { "name": "Sand" },
   "license": "0BSD",

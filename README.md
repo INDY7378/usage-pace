@@ -6,7 +6,7 @@ A Claude Code mod that shows your plan's usage limits (5-hour, weekly, and the p
 
 This is a fork of [sand-jp/usage-pace](https://github.com/sand-jp/usage-pace) that adds the per-model weekly gauge (`model`).
 
-![The usage-pace pane in the desktop app (Japanese)](docs/pane.png)
+![The usage-pace pane (Japanese)](docs/pane.png)
 
 An English display is also available.
 

@@ -6,7 +6,7 @@ Claude Code のプランの使用量(5時間・週間、Max の Fable のみの�
 
 [sand-jp/usage-pace](https://github.com/sand-jp/usage-pace) の fork で、モデル別の週間のゲージ(`model`)を足した。
 
-![デスクトップアプリの usage-pace のパネル](docs/pane.png)
+![usage-pace のパネル](docs/pane.png)
 
 ## 表示
 4つの要素があり、それぞれ表示を切り替えられる。

@@ -321,3 +321,31 @@ test('no first-party credential: no request, no gauge', async ($, on) => {
   expect(await ui.find({ type: 'Text', text: /Fable/ })).toBe(undefined)
   await ui.unmount()
 })
+
+test('a broken store file: the pane still shows this chat, Fable included', async ($, on) => {
+  const clock = mock.clock(on, { now: NOW })
+  on('command.register', () => ({ value: { command: 'usage-pace' } }))
+  on('ui.open', () => ({ value: { isPlaced: true } }))
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('settings.read', () => ({ value: { language: 'japanese' } }))
+  on('ui.panes', () => ({ value: [] }))
+  // as the engine answers a store file that is not JSON
+  on('store.get', () => {
+    throw new Error('store file is malformed')
+  })
+  on('store.set', () => {
+    throw new Error('store file is malformed')
+  })
+  on('session.usage', () => ({
+    value: { startedAt: NOW, context: { percent: 0 }, rateLimits: [{ kind: 'five_hour', percentUsed: 12, resetsAt: at(2 * HOUR) }] },
+  }) as never)
+  on('session.authorize', () => ({ value: { handle: 'h1', kind: 'bearer' } }))
+  on('http.fetch', () => ({ value: { status: 200, ok: true, headers: {}, text: JSON.stringify(USAGE_BODY) } }))
+  await $.session.start({ cwd: '/', surface: 'desktop', isInteractive: true })
+  await clock.settle()
+
+  const ui = await $.ui.mount({ ...PANE, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /5時間/ }))?.text).toContain('12%')
+  expect((await ui.find({ type: 'Text', text: /Fable/ }))?.text).toContain('21%')
+  await ui.unmount()
+})

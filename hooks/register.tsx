@@ -134,6 +134,24 @@ const STORE_LIMITS = 'lastLimits'
 const STORE_PARTS = 'parts'
 const STORE_SCOPED = 'lastScoped'
 
+type StoreValue = Parameters<EngineInterface['store']['set']>[1]
+
+/** $.store.get, which throws on a broken store file: the read then has nothing, and the mod goes on. */
+async function storeGet($: EngineInterface, key: string): Promise<unknown> {
+  try {
+    return await $.store.get(key)
+  } catch {
+    return undefined
+  }
+}
+
+/** $.store.set; a write the store refuses is lost, the chat keeps its own values. */
+async function storeSet($: EngineInterface, key: string, value: StoreValue): Promise<void> {
+  try {
+    await $.store.set(key, value)
+  } catch {}
+}
+
 const WINDOWS: Record<string, { label: 'fiveHour' | 'week'; tag: string; ms: number; unit: 'm' | 'h' }> = {
   five_hour: { label: 'fiveHour', tag: 'S', ms: 5 * HOUR, unit: 'm' },
   seven_day: { label: 'week', tag: 'W', ms: 7 * 24 * HOUR, unit: 'h' },
@@ -371,7 +389,7 @@ async function refreshScoped($: EngineInterface): Promise<void> {
   if (scopedAsking) return scopedAsking
   scopedAsking = (async () => {
     const now = await $.clock.now()
-    const saved = await $.store.get(STORE_SCOPED)
+    const saved = await storeGet($, STORE_SCOPED)
     const last = isScoped(saved) ? saved : null
     if (last && (!isScopedDirty || now - last.at < SCOPED_EVERY)) {
       await update($, scoped, () => last.limits)
@@ -387,7 +405,7 @@ async function refreshScoped($: EngineInterface): Promise<void> {
       }
     } catch {}
     // a failed ask waits the same 5 minutes, keeping the last reading
-    await $.store.set(STORE_SCOPED, { at: now, limits: list })
+    await storeSet($, STORE_SCOPED, { at: now, limits: list })
     await update($, scoped, () => list)
   })().finally(() => {
     scopedAsking = null
@@ -409,13 +427,13 @@ async function takeLimits($: EngineInterface, list: readonly Limit[]): Promise<v
   const copy = list.map(r => ({ ...r }))
   await update($, limits, () => copy)
   await update($, stale, () => false)
-  await $.store.set(STORE_LIMITS, copy)
+  await storeSet($, STORE_LIMITS, copy)
 }
 
 /** Until this chat has a reading of its own, the last one any chat saved. */
 async function loadSaved($: EngineInterface): Promise<void> {
   if ((await read($, limits)).length > 0 && !(await read($, stale))) return
-  const saved = await $.store.get(STORE_LIMITS)
+  const saved = await storeGet($, STORE_LIMITS)
   if (isLimitList(saved) && saved.length > 0) {
     await update($, limits, () => saved)
     await update($, stale, () => true)
@@ -492,7 +510,7 @@ export const register: Register = on => {
       description: T.description,
       argumentHint: '[pace|context|line|clock|model|all] [on|off|tiny] | status',
     })
-    const saved = await $.store.get(STORE_PARTS)
+    const saved = await storeGet($, STORE_PARTS)
     const restored = savedParts(saved)
     if (restored) await update($, parts, () => restored)
     await refresh($)
@@ -520,7 +538,7 @@ export const register: Register = on => {
     const next = applyArgs(current, args)
     if (typeof next === 'string') return { text: next }
     await update($, parts, () => next)
-    await $.store.set(STORE_PARTS, next)
+    await storeSet($, STORE_PARTS, next)
     await setPaneShown($, next)
     await refreshScoped($)
     await drawStatus($)
